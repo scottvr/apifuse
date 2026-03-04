@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import mfusepy as fuse
+from json_fuse import JSONFuse
 
 try:
     import yaml
@@ -1376,13 +1377,22 @@ class APIFuse(fuse.Operations):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Mount a read-only FUSE filesystem backed by an OpenAPI spec."
+        description="Mount a read-only FUSE filesystem backed by an OpenAPI spec or static JSON."
     )
     parser.add_argument("mountpoint", help="directory where the filesystem will be mounted")
     parser.add_argument(
+        "--mode",
+        choices=("openapi", "json"),
+        default="openapi",
+        help="data source mode (default: openapi)",
+    )
+    parser.add_argument(
         "--api-spec",
-        required=True,
-        help="path or URL for the OpenAPI JSON/YAML spec, or a base API URL",
+        help="path or URL for the OpenAPI JSON/YAML spec, or a base API URL (openapi mode)",
+    )
+    parser.add_argument(
+        "--json-input",
+        help="path to a local JSON file to mount directly (json mode)",
     )
     parser.add_argument(
         "--server-url",
@@ -1464,9 +1474,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     args.mountpoint = os.path.abspath(args.mountpoint)
-    parsed_api_spec = urllib.parse.urlparse(args.api_spec)
-    if parsed_api_spec.scheme not in {"http", "https"} or not parsed_api_spec.netloc:
-        args.api_spec = os.path.abspath(args.api_spec)
+    if args.api_spec:
+        parsed_api_spec = urllib.parse.urlparse(args.api_spec)
+        if parsed_api_spec.scheme not in {"http", "https"} or not parsed_api_spec.netloc:
+            args.api_spec = os.path.abspath(args.api_spec)
+    if args.json_input:
+        args.json_input = os.path.abspath(args.json_input)
     if args.bearer_token_file:
         args.bearer_token_file = os.path.abspath(args.bearer_token_file)
     if args.log_file:
@@ -1483,9 +1496,11 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(**logging_kwargs)
 
     LOGGER.info(
-        "starting apifuse mountpoint=%s api_spec=%s server_url=%s foreground=%s",
+        "starting apifuse mode=%s mountpoint=%s api_spec=%s json_input=%s server_url=%s foreground=%s",
+        args.mode,
         args.mountpoint,
         args.api_spec,
+        args.json_input,
         args.server_url,
         args.foreground,
     )
@@ -1496,23 +1511,35 @@ def main(argv: list[str] | None = None) -> int:
             "libfuse daemon mode is unreliable on macOS; prefer the default foreground mode and background the process externally"
         )
 
-    try:
-        operations = APIFuse(
-            args.api_spec,
-            server_url=args.server_url,
-            timeout=args.timeout,
-            bearer_token=args.bearer_token,
-            bearer_token_file=args.bearer_token_file,
-            bearer_token_env=args.bearer_token_env,
-            probe_limit=args.probe_limit,
-            cache_ttl=args.cache_ttl,
-            error_cache_ttl=args.error_cache_ttl,
-            cache_max_entries=args.cache_max_entries,
-            symlink_names=args.symlink_names,
-            symlink_map=args.symlink_map,
-        )
-    except APISpecError as exc:
-        parser.error(str(exc))
+    if args.mode == "openapi":
+        if not args.api_spec:
+            parser.error("--api-spec is required in openapi mode")
+        try:
+            operations = APIFuse(
+                args.api_spec,
+                server_url=args.server_url,
+                timeout=args.timeout,
+                bearer_token=args.bearer_token,
+                bearer_token_file=args.bearer_token_file,
+                bearer_token_env=args.bearer_token_env,
+                probe_limit=args.probe_limit,
+                cache_ttl=args.cache_ttl,
+                error_cache_ttl=args.error_cache_ttl,
+                cache_max_entries=args.cache_max_entries,
+                symlink_names=args.symlink_names,
+                symlink_map=args.symlink_map,
+            )
+        except APISpecError as exc:
+            parser.error(str(exc))
+    else:
+        if not args.json_input:
+            parser.error("--json-input is required in json mode")
+        try:
+            with open(args.json_input, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+        except (OSError, json.JSONDecodeError) as exc:
+            parser.error(f"unable to load JSON from {args.json_input}: {exc}")
+        operations = JSONFuse(payload)
 
     fuse.FUSE(
         operations,

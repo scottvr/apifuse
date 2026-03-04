@@ -2,6 +2,8 @@
 
 `apifuse` is a user-space FUSE proof of concept that projects a REST API described by OpenAPI into a read-only filesystem.
 
+It can also mount a local JSON document directly as a static filesystem tree.
+
 It is designed around a simple idea:
 
 - collections such as `/users/` become directories
@@ -14,6 +16,7 @@ It is designed around a simple idea:
 This is an early prototype. The current implementation focuses on:
 
 - OpenAPI-driven discovery of top-level collection and item `GET` routes
+- JSON-file offline mode (`--mode json`)
 - bearer-token auth
 - strict schema-aware path filtering
 - short-lived response caching
@@ -45,10 +48,13 @@ uv pip install -r pyproject.toml
 
 ## Basic Usage
 
+OpenAPI mode:
+
 Mount using a local OpenAPI file and an explicit server URL:
 
 ```bash
 ./.venv/bin/python apifuse.py \
+  --mode openapi \
   --api-spec ./openapi.json \
   --server-url http://127.0.0.1:8000 \
   --bearer-token-file ./bearer.token \
@@ -62,6 +68,25 @@ ls /tmp/mnt_apifuse
 ls /tmp/mnt_apifuse/users
 ls /tmp/mnt_apifuse/users/3
 cat /tmp/mnt_apifuse/users/3/username
+```
+
+JSON mode:
+
+Mount a local JSON file directly with no API calls:
+
+```bash
+./.venv/bin/python apifuse.py \
+  --mode json \
+  --json-input ./repos.json \
+  /tmp/mnt_apifuse_json
+```
+
+Then inspect:
+
+```bash
+ls /tmp/mnt_apifuse_json
+ls /tmp/mnt_apifuse_json/0
+cat /tmp/mnt_apifuse_json/0/name
 ```
 
 ## Authentication
