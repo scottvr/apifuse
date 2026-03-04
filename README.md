@@ -16,8 +16,8 @@ It is designed around a simple idea:
 This is an early prototype. The current implementation focuses on:
 
 - OpenAPI-driven discovery of top-level collection and item `GET` routes
-- JSON-file offline mode (`--mode json`)
-- bearer-token auth
+- JSON-file offline mode (`--json-input`)
+- auth-token auth
 - strict schema-aware path filtering
 - short-lived response caching
 - optional collection-level symlink aliases such as `users/alice -> 3`
@@ -53,10 +53,10 @@ OpenAPI mode:
 Mount using a local OpenAPI file and an explicit server URL:
 
 ```bash
-./.venv/bin/python apifuse.py \
+PYTHONPATH=src ./.venv/bin/python -m apifuse \
   --api-spec ./openapi.json \
   --server-url http://127.0.0.1:8000 \
-  --bearer-token-file ./bearer.token \
+  --auth-token-file ./bearer.token \
   /tmp/mnt_apifuse
 ```
 
@@ -74,7 +74,7 @@ JSON mode:
 Mount a local JSON file directly with no API calls:
 
 ```bash
-./.venv/bin/python apifuse.py \
+PYTHONPATH=src ./.venv/bin/python -m apifuse \
   --json-input ./repos.json \
   /tmp/mnt_apifuse_json
 ```
@@ -91,9 +91,9 @@ cat /tmp/mnt_apifuse_json/0/name
 
 Bearer auth can be supplied in three ways:
 
-- `--bearer-token <token>`
-- `--bearer-token-file <path>`
-- `--bearer-token-env <ENV_NAME>` (defaults to `APIFUSE_BEARER_TOKEN`)
+- `--auth-token <token>`
+- `--auth-token-file <path>`
+- `--auth-token-env <ENV_NAME>` (defaults to `APIFUSE_auth_token`)
 
 The token value should be the raw bearer token string. `apifuse` adds the `Authorization: Bearer ...` header itself.
 
@@ -113,10 +113,10 @@ products/
 Enable common name-like aliases:
 
 ```bash
-./.venv/bin/python apifuse.py \
+PYTHONPATH=src ./.venv/bin/python -m apifuse \
   --api-spec ./openapi.json \
   --server-url http://127.0.0.1:8000 \
-  --bearer-token-file ./bearer.token \
+  --auth-token-file ./bearer.token \
   --symlink-names \
   /tmp/mnt_apifuse
 ```
@@ -124,10 +124,10 @@ Enable common name-like aliases:
 Add explicit alias mappings:
 
 ```bash
-./.venv/bin/python apifuse.py \
+PYTHONPATH=src ./.venv/bin/python -m apifuse \
   --api-spec ./openapi.json \
   --server-url http://127.0.0.1:8000 \
-  --bearer-token-file ./bearer.token \
+  --auth-token-file ./bearer.token \
   --symlink-map users=username \
   --symlink-map products=title \
   --symlink-map products=categories/name \
@@ -158,10 +158,10 @@ Relevant flags:
 Example:
 
 ```bash
-./.venv/bin/python apifuse.py \
+PYTHONPATH=src ./.venv/bin/python -m apifuse \
   --api-spec ./openapi.json \
   --server-url http://127.0.0.1:8000 \
-  --bearer-token-file ./bearer.token \
+  --auth-token-file ./bearer.token \
   --cache-ttl 5 \
   --error-cache-ttl 2 \
   --probe-limit 10 \
@@ -173,10 +173,10 @@ Example:
 Enable debug logging:
 
 ```bash
-./.venv/bin/python apifuse.py \
+PYTHONPATH=src ./.venv/bin/python -m apifuse \
   --api-spec ./openapi.json \
   --server-url http://127.0.0.1:8000 \
-  --bearer-token-file ./bearer.token \
+  --auth-token-file ./bearer.token \
   --debug \
   /tmp/mnt_apifuse
 ```
@@ -184,10 +184,10 @@ Enable debug logging:
 Write logs to a file:
 
 ```bash
-./.venv/bin/python apifuse.py \
+PYTHONPATH=src ./.venv/bin/python -m apifuse \
   --api-spec ./openapi.json \
   --server-url http://127.0.0.1:8000 \
-  --bearer-token-file ./bearer.token \
+  --auth-token-file ./bearer.token \
   --debug \
   --log-file /tmp/apifuse.log \
   /tmp/mnt_apifuse
@@ -200,10 +200,10 @@ Foreground mode is the default and is the recommended mode.
 On macOS, libfuse's internal daemon mode has been unreliable in testing. If you need background behavior, keep `apifuse` in foreground mode and background the process externally:
 
 ```bash
-nohup ./.venv/bin/python apifuse.py \
+nohup env PYTHONPATH=src ./.venv/bin/python -m apifuse \
   --api-spec ./openapi.json \
   --server-url http://127.0.0.1:8000 \
-  --bearer-token-file ./bearer.token \
+  --auth-token-file ./bearer.token \
   --log-file /tmp/apifuse.log \
   /tmp/mnt_apifuse \
   >/tmp/apifuse.stdout 2>&1 &
@@ -212,10 +212,10 @@ nohup ./.venv/bin/python apifuse.py \
 If you explicitly want libfuse daemon mode anyway, use:
 
 ```bash
-./.venv/bin/python apifuse.py \
+PYTHONPATH=src ./.venv/bin/python -m apifuse \
   --api-spec ./openapi.json \
   --server-url http://127.0.0.1:8000 \
-  --bearer-token-file ./bearer.token \
+  --auth-token-file ./bearer.token \
   --daemonize \
   --log-file /tmp/apifuse.log \
   /tmp/mnt_apifuse
