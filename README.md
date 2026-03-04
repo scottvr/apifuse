@@ -54,7 +54,6 @@ Mount using a local OpenAPI file and an explicit server URL:
 
 ```bash
 ./.venv/bin/python apifuse.py \
-  --mode openapi \
   --api-spec ./openapi.json \
   --server-url http://127.0.0.1:8000 \
   --bearer-token-file ./bearer.token \
@@ -76,7 +75,6 @@ Mount a local JSON file directly with no API calls:
 
 ```bash
 ./.venv/bin/python apifuse.py \
-  --mode json \
   --json-input ./repos.json \
   /tmp/mnt_apifuse_json
 ```
@@ -144,7 +142,7 @@ Add explicit alias mappings:
 
 The right-hand side is a path inside each resource object, not an API path.
 
-In `--mode json`, aliases are created at the root when the JSON document is a top-level list. For JSON mode mappings, use either `root=<field-path>` or just `<field-path>`.
+With `--json-input`, aliases are created at the root when the JSON document is a top-level list. For JSON-mode mappings, use either `root=<field-path>` or just `<field-path>`.
 
 ## Caching
 

@@ -1467,6 +1467,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    mode = "json" if args.json_input else "openapi"
 
     args.mountpoint = os.path.abspath(args.mountpoint)
     if args.api_spec:
@@ -1492,7 +1493,7 @@ def main(argv: list[str] | None = None) -> int:
 
     LOGGER.info(
         "starting apifuse mode=%s mountpoint=%s api_spec=%s json_input=%s server_url=%s foreground=%s",
-        args.mode,
+        mode,
         args.mountpoint,
         args.api_spec,
         args.json_input,
@@ -1506,9 +1507,7 @@ def main(argv: list[str] | None = None) -> int:
             "libfuse daemon mode is unreliable on macOS; prefer the default foreground mode and background the process externally"
         )
 
-    if args.mode == "openapi":
-        if not args.api_spec:
-            parser.error("--api-spec is required in openapi mode")
+    if mode == "openapi":
         try:
             operations = APIFuse(
                 args.api_spec,
@@ -1527,8 +1526,6 @@ def main(argv: list[str] | None = None) -> int:
         except APISpecError as exc:
             parser.error(str(exc))
     else:
-        if not args.json_input:
-            parser.error("--json-input is required in json mode")
         try:
             with open(args.json_input, "r", encoding="utf-8") as handle:
                 payload = json.load(handle)
