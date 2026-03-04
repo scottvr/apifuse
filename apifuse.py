@@ -10,6 +10,7 @@ import os
 import re
 import ssl
 import stat
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -1442,14 +1443,18 @@ def build_parser() -> argparse.ArgumentParser:
         help="HTTP timeout in seconds for spec and endpoint requests",
     )
     parser.add_argument(
-        "--foreground",
+        "--daemonize",
         action="store_true",
-        help="run in the foreground instead of daemonizing",
+        help="ask libfuse to daemonize internally (not recommended on macOS; prefer external process management)",
     )
     parser.add_argument(
         "--debug",
         action="store_true",
         help="enable debug logging",
+    )
+    parser.add_argument(
+        "--log-file",
+        help="write logs to this file instead of stderr (recommended for daemon mode)",
     )
     return parser
 
@@ -1458,10 +1463,38 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    logging.basicConfig(
-        level=logging.DEBUG if args.debug else logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    args.mountpoint = os.path.abspath(args.mountpoint)
+    parsed_api_spec = urllib.parse.urlparse(args.api_spec)
+    if parsed_api_spec.scheme not in {"http", "https"} or not parsed_api_spec.netloc:
+        args.api_spec = os.path.abspath(args.api_spec)
+    if args.bearer_token_file:
+        args.bearer_token_file = os.path.abspath(args.bearer_token_file)
+    if args.log_file:
+        args.log_file = os.path.abspath(args.log_file)
+    args.foreground = not args.daemonize
+
+    logging_kwargs: dict[str, Any] = {
+        "level": logging.DEBUG if args.debug else logging.INFO,
+        "format": "%(asctime)s %(levelname)s %(name)s: %(message)s",
+    }
+    if args.log_file:
+        logging_kwargs["filename"] = args.log_file
+        logging_kwargs["filemode"] = "a"
+    logging.basicConfig(**logging_kwargs)
+
+    LOGGER.info(
+        "starting apifuse mountpoint=%s api_spec=%s server_url=%s foreground=%s",
+        args.mountpoint,
+        args.api_spec,
+        args.server_url,
+        args.foreground,
     )
+    if args.log_file:
+        LOGGER.info("logging to %s", args.log_file)
+    if args.daemonize and sys.platform == "darwin":
+        LOGGER.warning(
+            "libfuse daemon mode is unreliable on macOS; prefer the default foreground mode and background the process externally"
+        )
 
     try:
         operations = APIFuse(
