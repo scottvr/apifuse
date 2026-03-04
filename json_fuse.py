@@ -4,28 +4,15 @@ import errno
 import json
 import logging
 import os
-import stat
-import time
 from typing import Any
 
-import mfusepy as fuse
+from provider_fuse import ProviderError, ProviderFuse, ProviderNode
 
 
 LOGGER = logging.getLogger(__name__)
 
 
-class JSONFuse(fuse.Operations):
-    """
-    Read-only FUSE projection of a static JSON document.
-
-    Rules:
-    - dict => directory of keys
-    - list => directory of numeric indexes
-    - scalar => readable file
-    """
-
-    use_ns = True
-
+class JSONProvider:
     def __init__(
         self,
         data: Any,
@@ -33,9 +20,6 @@ class JSONFuse(fuse.Operations):
         symlink_map: list[str] | None = None,
     ) -> None:
         self.data = data
-        self._dir_mode = stat.S_IFDIR | 0o755
-        self._file_mode = stat.S_IFREG | 0o444
-        self._symlink_mode = stat.S_IFLNK | 0o777
         self._symlink_paths = self._build_root_symlink_paths(
             symlink_names=symlink_names,
             symlink_map=symlink_map or [],
@@ -46,53 +30,26 @@ class JSONFuse(fuse.Operations):
         else:
             LOGGER.debug("json mode symlink aliases disabled")
 
-    def access(self, path: str, mode: int) -> int:
-        if mode & os.W_OK:
-            raise fuse.FuseOSError(errno.EROFS)
-        self.getattr(path)
-        return 0
-
-    def getattr(self, path: str, fh: int | None = None) -> dict[str, Any]:
-        now = time.time()
+    def get_node(self, path: str) -> ProviderNode | None:
         normalized = self._normalize_path(path)
+        if normalized == "/":
+            return ProviderNode(kind="dir")
         symlink_target = self._symlink_target(normalized)
         if symlink_target is not None:
-            return {
-                "st_mode": self._symlink_mode,
-                "st_nlink": 1,
-                "st_size": len(symlink_target.encode("utf-8")),
-                "st_ctime": now,
-                "st_mtime": now,
-                "st_atime": now,
-            }
+            return ProviderNode(kind="symlink", target=symlink_target)
         node = self._resolve_node(normalized)
         if node is None:
-            raise fuse.FuseOSError(errno.ENOENT)
+            return None
         if isinstance(node, (dict, list)):
-            return {
-                "st_mode": self._dir_mode,
-                "st_nlink": 2,
-                "st_size": 0,
-                "st_ctime": now,
-                "st_mtime": now,
-                "st_atime": now,
-            }
-        content = self._encode_scalar(node)
-        return {
-            "st_mode": self._file_mode,
-            "st_nlink": 1,
-            "st_size": len(content),
-            "st_ctime": now,
-            "st_mtime": now,
-            "st_atime": now,
-        }
+            return ProviderNode(kind="dir")
+        return ProviderNode(kind="file", content=self._encode_scalar(node))
 
-    def readdir(self, path: str, fh: int) -> list[str]:
+    def list_dir(self, path: str) -> list[str]:
         normalized = self._normalize_path(path)
         node = self._resolve_node(normalized)
         if node is None:
-            raise fuse.FuseOSError(errno.ENOENT)
-        entries = [".", ".."]
+            raise ProviderError("path not found", errno_code=errno.ENOENT)
+        entries: list[str] = []
         if normalized == "/":
             entries.extend(sorted(self._aliases))
         if isinstance(node, dict):
@@ -101,38 +58,7 @@ class JSONFuse(fuse.Operations):
         if isinstance(node, list):
             entries.extend(str(index) for index in range(len(node)))
             return entries
-        raise fuse.FuseOSError(errno.ENOTDIR)
-
-    def open(self, path: str, flags: int) -> int:
-        if flags & os.O_WRONLY or flags & os.O_RDWR:
-            raise fuse.FuseOSError(errno.EROFS)
-        normalized = self._normalize_path(path)
-        if self._symlink_target(normalized) is not None:
-            raise fuse.FuseOSError(errno.ELOOP)
-        node = self._resolve_node(normalized)
-        if node is None:
-            raise fuse.FuseOSError(errno.ENOENT)
-        if isinstance(node, (dict, list)):
-            raise fuse.FuseOSError(errno.EISDIR)
-        return 0
-
-    def read(self, path: str, size: int, offset: int, fh: int) -> bytes:
-        normalized = self._normalize_path(path)
-        if self._symlink_target(normalized) is not None:
-            raise fuse.FuseOSError(errno.ELOOP)
-        node = self._resolve_node(normalized)
-        if node is None:
-            raise fuse.FuseOSError(errno.ENOENT)
-        if isinstance(node, (dict, list)):
-            raise fuse.FuseOSError(errno.EISDIR)
-        content = self._encode_scalar(node)
-        return content[offset : offset + size]
-
-    def readlink(self, path: str) -> str:
-        target = self._symlink_target(self._normalize_path(path))
-        if target is None:
-            raise fuse.FuseOSError(errno.ENOENT)
-        return target
+        raise ProviderError("not a directory", errno_code=errno.ENOTDIR)
 
     def statfs(self, path: str) -> dict[str, int]:
         return {
@@ -200,14 +126,7 @@ class JSONFuse(fuse.Operations):
     ) -> list[tuple[str, ...]]:
         paths: list[tuple[str, ...]] = []
         if symlink_names:
-            paths.extend(
-                [
-                    ("name",),
-                    ("username",),
-                    ("slug",),
-                    ("title",),
-                ]
-            )
+            paths.extend([("name",), ("username",), ("slug",), ("title",)])
         for raw_arg in symlink_map:
             for entry in raw_arg.split(","):
                 parsed = self._parse_symlink_map_entry(entry.strip())
@@ -237,7 +156,6 @@ class JSONFuse(fuse.Operations):
     def _build_root_alias_map(self) -> dict[str, str]:
         if not isinstance(self.data, list) or not self._symlink_paths:
             return {}
-
         aliases: dict[str, str] = {}
         reserved = {str(index) for index in range(len(self.data))}
         for index, item in enumerate(self.data):
@@ -288,7 +206,21 @@ class JSONFuse(fuse.Operations):
         parts = [part for part in path.strip("/").split("/") if part]
         if len(parts) != 1:
             return None
-        target = self._aliases.get(parts[0])
-        if target is None:
-            return None
-        return target
+        return self._aliases.get(parts[0])
+
+
+class JSONFuse(ProviderFuse):
+    def __init__(
+        self,
+        data: Any,
+        symlink_names: bool = False,
+        symlink_map: list[str] | None = None,
+    ) -> None:
+        super().__init__(
+            JSONProvider(
+                data,
+                symlink_names=symlink_names,
+                symlink_map=symlink_map,
+            )
+        )
+

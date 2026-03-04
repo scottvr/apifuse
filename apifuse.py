@@ -20,6 +20,7 @@ from typing import Any
 
 import mfusepy as fuse
 from json_fuse import JSONFuse
+from provider_fuse import ProviderError, ProviderFuse, ProviderNode
 
 try:
     import yaml
@@ -73,6 +74,41 @@ class APISpecError(RuntimeError):
     def __init__(self, message: str, status_code: int | None = None) -> None:
         super().__init__(message)
         self.status_code = status_code
+
+
+class OpenAPIProviderAdapter:
+    def __init__(self, impl: "APIFuse") -> None:
+        self.impl = impl
+
+    def get_node(self, path: str) -> ProviderNode | None:
+        try:
+            st = self.impl.getattr(path)
+        except fuse.FuseOSError as exc:
+            if exc.errno == errno.ENOENT:
+                return None
+            raise ProviderError(str(exc), errno_code=exc.errno) from exc
+
+        mode = int(st.get("st_mode", 0))
+        if stat.S_ISDIR(mode):
+            return ProviderNode(kind="dir")
+        if stat.S_ISLNK(mode):
+            target = self.impl.readlink(path)
+            return ProviderNode(kind="symlink", target=target)
+        if stat.S_ISREG(mode):
+            size = int(st.get("st_size", 0))
+            content = self.impl.read(path, size, 0, 0)
+            return ProviderNode(kind="file", content=content)
+        return None
+
+    def list_dir(self, path: str) -> list[str]:
+        try:
+            entries = self.impl.readdir(path, 0)
+        except fuse.FuseOSError as exc:
+            raise ProviderError(str(exc), errno_code=exc.errno) from exc
+        return [entry for entry in entries if entry not in {".", ".."}]
+
+    def statfs(self, path: str) -> dict[str, int]:
+        return self.impl.statfs(path)
 
 
 class APIFuse(fuse.Operations):
@@ -1509,7 +1545,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if mode == "openapi":
         try:
-            operations = APIFuse(
+            provider = APIFuse(
                 args.api_spec,
                 server_url=args.server_url,
                 timeout=args.timeout,
@@ -1523,6 +1559,7 @@ def main(argv: list[str] | None = None) -> int:
                 symlink_names=args.symlink_names,
                 symlink_map=args.symlink_map,
             )
+            operations = ProviderFuse(OpenAPIProviderAdapter(provider))
         except APISpecError as exc:
             parser.error(str(exc))
     else:
