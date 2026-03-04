@@ -7,6 +7,7 @@ import errno
 import json
 import logging
 import os
+import re
 import ssl
 import stat
 import time
@@ -45,6 +46,7 @@ class EndpointDefinition:
     responses: dict[str, Any]
     list_schema: dict[str, Any] | None
     item_schema: dict[str, Any] | None
+    item_parameter_schema: dict[str, Any] | None
 
 
 @dataclass
@@ -290,6 +292,7 @@ class APIFuse(fuse.Operations):
                 "responses": endpoint.responses,
                 "list_schema": endpoint.list_schema,
                 "item_schema": endpoint.item_schema,
+                "item_parameter_schema": endpoint.item_parameter_schema,
             },
             indent=2,
             sort_keys=True,
@@ -490,6 +493,8 @@ class APIFuse(fuse.Operations):
     ) -> bool:
         if not remainder:
             return True
+        if not self._is_valid_resource_id(endpoint, remainder[0]):
+            return False
         if len(remainder) == 1:
             return True
         if len(remainder) == 2 and remainder[1] == ".raw.json":
@@ -497,6 +502,42 @@ class APIFuse(fuse.Operations):
         if endpoint.item_schema is None:
             return True
         return self._resolve_schema_node_for_path(endpoint.item_schema, remainder[1:]) is not None
+
+    def _is_valid_resource_id(self, endpoint: EndpointDefinition, resource_id: str) -> bool:
+        schema = self._resolve_schema(endpoint.item_parameter_schema)
+        if schema is None:
+            return True
+
+        enum_values = schema.get("enum")
+        if isinstance(enum_values, list):
+            normalized_enum = {str(value) for value in enum_values}
+            if resource_id not in normalized_enum:
+                return False
+
+        schema_type = schema.get("type")
+        if schema_type == "integer":
+            return self._is_integer_string(resource_id)
+        if schema_type == "number":
+            return self._is_number_string(resource_id)
+        if schema_type == "boolean":
+            return resource_id in {"true", "false", "0", "1"}
+        if schema_type == "string" or schema_type is None:
+            min_length = schema.get("minLength")
+            if isinstance(min_length, int) and len(resource_id) < min_length:
+                return False
+            max_length = schema.get("maxLength")
+            if isinstance(max_length, int) and len(resource_id) > max_length:
+                return False
+            pattern = schema.get("pattern")
+            if isinstance(pattern, str):
+                try:
+                    if re.fullmatch(pattern, resource_id) is None:
+                        return False
+                except re.error:
+                    LOGGER.debug("ignoring invalid regex pattern in OpenAPI schema: %s", pattern)
+            return True
+
+        return True
 
     def _resolve_schema_node_for_path(
         self,
@@ -778,6 +819,30 @@ class APIFuse(fuse.Operations):
                 return schema
         return None
 
+    def _extract_parameter_schema(
+        self,
+        path_item: dict[str, Any],
+        get_op: dict[str, Any],
+        parameter_name: str,
+    ) -> dict[str, Any] | None:
+        merged_parameters: list[Any] = []
+        for source in (path_item.get("parameters"), get_op.get("parameters")):
+            if isinstance(source, list):
+                merged_parameters.extend(source)
+
+        for parameter in merged_parameters:
+            resolved = self._resolve_schema(parameter)
+            if not isinstance(resolved, dict):
+                continue
+            if resolved.get("in") != "path":
+                continue
+            if resolved.get("name") != parameter_name:
+                continue
+            schema = resolved.get("schema")
+            if isinstance(schema, dict):
+                return schema
+        return None
+
     def _extract_resource_schema(self, response_schema: dict[str, Any] | None) -> dict[str, Any] | None:
         resolved = self._resolve_schema(response_schema)
         if not isinstance(resolved, dict):
@@ -863,6 +928,20 @@ class APIFuse(fuse.Operations):
             node = node.get(token)
         return node
 
+    def _is_integer_string(self, value: str) -> bool:
+        if not value:
+            return False
+        if value[0] in "+-":
+            return value[1:].isdigit()
+        return value.isdigit()
+
+    def _is_number_string(self, value: str) -> bool:
+        try:
+            float(value)
+        except ValueError:
+            return False
+        return True
+
     def _determine_base_url(
         self,
         source: str,
@@ -926,6 +1005,7 @@ class APIFuse(fuse.Operations):
                     responses={},
                     list_schema=None,
                     item_schema=None,
+                    item_parameter_schema=None,
                 )
 
             list_path = existing.list_path
@@ -940,11 +1020,17 @@ class APIFuse(fuse.Operations):
 
             list_schema = existing.list_schema
             item_schema = existing.item_schema
+            item_parameter_schema = existing.item_parameter_schema
             response_schema = self._extract_get_response_schema(get_op)
             if item_parameter is None:
                 list_schema = response_schema
             else:
                 item_schema = self._extract_resource_schema(response_schema)
+                item_parameter_schema = self._extract_parameter_schema(
+                    path_item,
+                    get_op,
+                    item_parameter,
+                )
 
             endpoints[name] = EndpointDefinition(
                 name=name,
@@ -958,6 +1044,7 @@ class APIFuse(fuse.Operations):
                 responses=get_op.get("responses", existing.responses),
                 list_schema=list_schema,
                 item_schema=item_schema,
+                item_parameter_schema=item_parameter_schema,
             )
 
         if not endpoints:
