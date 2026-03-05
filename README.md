@@ -1,29 +1,24 @@
 # apifuse
 
-`apifuse` is a user-space FUSE proof of concept that projects an OpenAPI-described  
-REST API into a mounted read-only filesystem on Linux and MacOS (or on Windows, in WSL2.)  
-The contents of the filesystem are dynamically populated with "files" and "directories"  
-created in real-time with data received from REST (HTTP) calls to an OpenAI-spec API. Obviously,  
-that's gonna come at a cost of pretty high latency compared to an actual disk drive, but no one   
-is going to mount an API as a filesystem in order to top any IOPS benchmarks.
+`apifuse` is a user-space FUSE proof of concept that projects an OpenAPI-described REST API into a mounted read-only filesystem on Linux and MacOS (or on 
+Windows, in WSL2.)   The contents of the filesystem are dynamically populated with "files" and "directories" created in real-time with data received from 
+REST (HTTP) calls to an OpenAI-spec API. Obviously, that's gonna come at a cost of pretty high latency compared to an actual disk drive, but no one is 
+going to mount an API as a filesystem in order to top any IOPS benchmarks.
 
 
 # How? 
-The mounted filesystem's root directory is populated at startup, informed by the structure in the 
-spec file (openai.json, swagger.yaml, etc.) and the rest is populated as the subdirectories are listed,
-or when an attempt is made to access a specific filename within a subdirectory. 
+The mounted filesystem's root directory is populated at startup, informed by the structure in the spec file (openai.json, swagger.yaml, etc.) and the rest is
+populated as the subdirectories are listed, or when an attempt is made to access a specific filename within a subdirectory. 
 
-For a field that is not an array containing other objects or k/v pairs, it is represented as a file, and 
-the value of that field is stored *inside* the file, so reading the file with the name of one of these k/v
-string pairs, will read the value corresponding to that key.
+For a field that is not an array containing other objects or k/v pairs, it is represented as a file, and the value of that field is stored *inside* the file, 
+so reading the file with the name of one of these k/v string pairs, will read the value corresponding to that key.
 
-It can also mount a local JSON document directly as a static filesystem tree, which works the same in terms 
-of keys and data, just without needing to reach out over the network to an API in order to put that data on "disk".
+It can also mount a local JSON document directly as a static filesystem tree, which works the same in terms of keys and data, just without needing to reach 
+out over the network to an API in order to put that data on "disk".
 
-Keeping that in mind, at this point you'll want to take care that you don't mount an API or JSON file that 
-contains some gigantic data, but the fact that even large databases that support storing JSON limit the size
-of the entire JSON document to typically under 1GB (and often well under), it's not much of a realistic concern.
-I  just wouldn't recommend *intentionally trying to use apifuse in that way.
+Keeping that in mind, at this point you'll want to take care that you don't mount an API or JSON file that contains some gigantic data, but the fact that 
+even large databases that support storing JSON limit the size of the entire JSON document to typically under 1GB (and often well under), it's not much of a 
+realistic concern.  I just wouldn't recommend *intentionally trying to use apifuse in that way.
 
 # Design/Layout of the apifuse fs
 
@@ -34,20 +29,14 @@ I  just wouldn't recommend *intentionally trying to use apifuse in that way.
 - scalar fields become readable files
 - nested objects and arrays become subdirectories
 
-This turned out to be exceptionally navigable by myself, as someone who does most of their work in a bash shell.
-I *can* use curl, or perhaps a tool like postman if I need to make many API requests, but it never feels very
-convenient to have to work that way, and if I'm not familiar with what may be *in* the data returned, I'm always  
+This turned out to be exceptionally navigable by myself, as someone who does most of their work in a bash shell. I *can* use curl, or perhaps a tool like 
+postman if I need to make many API requests, but it never feels very convenient to have to work that way, and if I'm not familiar with what may be *in* the
+data returned, I'm always needing to look closely at parenthese and brackets to try to understand the shape of any deeply nested structure. Being able to 
+just cd / and tab-complete, ls, cat, pipe, sed/awk, etc on the data, laid out clearly in my terminal feels much more natural to me. I suspect it might even 
+be simpler and easier in some cases for Agentic use, where listing directories, standard posix tool-calling, and even mounting filesystems don't require 
+special skills, or MCP servers, or  magic prompts in order for an LLM to accomplish things; they just "know" how to do this at boot time.  
 
-needing to look closely at parenthese and brackets to try to understand the shape of any deeply nested structure.
-Being able to just cd / and tab-complete, ls, cat, pipe, sed/awk, etc on the data, laid out clearly in my terminal
-feels much more natural to me. I suspect it might even be simpler and easier in some cases for Agentic use, where
-listing directories, standard posix tool-calling, and even mounting filesystems don't require special skills, or MCP
-servers, or  magic prompts in order for an LLM to accomplish things; they just "know" how to do this at boot time.  
-
-So.. if anyone uses apifuse in order to expose some API to an LLM Agent, I'd love to hear about it. Another thing
-that might make a compelling use case for apifuse for Agentic AI use is that you can mount the filesystem, and allow
-it to be seen by a sandboxed Agent, and they can get all of the data from whatever API you mounted *without* having 
-to give the Agent any access to an API key, or JWT, etc. 
+So.. if anyone uses apifuse in order to expose some API to an LLM Agent, I'd love to hear about it. Another thing that might make a compelling use case for apifuse for Agentic AI use is that you can mount the filesystem, and allow it to be seen by a sandboxed Agent, and they can get all of the data from whatever API you mounted *without* having to give the Agent any access to an API key, or JWT, etc. 
 
 ## Current Status
 
@@ -228,7 +217,8 @@ Optional refresh discovery from API responses (disabled by default):
 - `--refresh-discovery-token-key <json_key>` (repeatable; default: `refresh_token`)
 
 Precedence rule: explicit CLI/env/file refresh values win; discovered values only fill missing `refresh_url`/`refresh_token`.
-For `--auth-json-file`, JSON-derived values are only used when token/refresh values are not already provided by direct CLI, token-file, or configured token-env values.
+For `--auth-json-file`, JSON-derived values are only used when token/refresh values are not already provided by direct CLI, 
+token-file, or configured token-env values.
 
 
 ## Caching
