@@ -1,6 +1,6 @@
 # apifuse
 
-`apifuse` is a user-space FUSE proof of concept that projects a REST API described by OpenAPI into a read-only filesystem.
+`apifuse` is a user-space FUSE proof of concept that projects an OpenAPI-described REST API into a read-only filesystem.
 
 It can also mount a local JSON document directly as a static filesystem tree.
 
