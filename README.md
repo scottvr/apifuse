@@ -1,8 +1,10 @@
 # apifuse
 
-`apifuse` is a user-space FUSE proof of concept that projects an OpenAPI-described REST API into a read-only filesystem.
+`apifuse` is a user-space FUSE proof of concept that projects an OpenAPI-described REST API into a read-only filesystem dynamically 
+populated with "files" and "directories" by responses to API calls when accessed by any means through the OS, as if the data resided on
+a local filesystem.
 
-It can also mount a local JSON document directly as a static filesystem tree.
+It can also mount a local JSON document directly as a static filesystem tree, without reaching out to an API to dynamically the tree or data contained within.
 
 It is designed around a simple idea:
 
@@ -13,7 +15,7 @@ It is designed around a simple idea:
 
 ## Current Status
 
-This is an early prototype. The current implementation focuses on:
+This is an early PoC. That said, "it works for me." The current implementation focuses on:
 
 - OpenAPI-driven discovery of top-level collection and item `GET` routes
 - JSON-file offline mode (`--json-input`)
