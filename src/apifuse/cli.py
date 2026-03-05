@@ -49,6 +49,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="environment variable name to read the auth token from (default: APIFUSE_auth_token)",
     )
     parser.add_argument(
+        "--auth-json-file",
+        help=(
+            "read auth settings from a JSON file (keys: access_token/auth_token/token, "
+            "refresh_token, refresh_url/refresh_endpoint/token_refresh_url)"
+        ),
+    )
+    parser.add_argument(
         "--auth-header",
         default="Authorization",
         help="HTTP header name for the auth token (default: Authorization)",
@@ -184,6 +191,8 @@ def main(argv: list[str] | None = None) -> int:
             args.api_spec = os.path.abspath(args.api_spec)
     if args.json_input:
         args.json_input = os.path.abspath(args.json_input)
+    if args.auth_json_file:
+        args.auth_json_file = os.path.abspath(args.auth_json_file)
     if args.auth_token_file:
         args.auth_token_file = os.path.abspath(args.auth_token_file)
     if args.refresh_token_file:
@@ -191,6 +200,41 @@ def main(argv: list[str] | None = None) -> int:
     if args.log_file:
         args.log_file = os.path.abspath(args.log_file)
     args.foreground = not args.daemonize
+
+    if args.auth_json_file:
+        try:
+            with open(args.auth_json_file, "r", encoding="utf-8") as handle:
+                auth_payload = json.load(handle)
+        except (OSError, json.JSONDecodeError) as exc:
+            parser.error(f"unable to load auth JSON from {args.auth_json_file}: {exc}")
+
+        if not isinstance(auth_payload, dict):
+            parser.error(f"auth JSON file {args.auth_json_file} must contain a JSON object")
+
+        candidates: list[dict[str, Any]] = [auth_payload]
+        nested_data = auth_payload.get("data")
+        if isinstance(nested_data, dict):
+            candidates.append(nested_data)
+
+        def _pick_string(keys: list[str]) -> str | None:
+            for container in candidates:
+                for key in keys:
+                    value = container.get(key)
+                    if isinstance(value, str) and value.strip():
+                        return value.strip()
+            return None
+
+        auth_env_has_value = bool(args.auth_token_env and os.environ.get(args.auth_token_env, "").strip())
+        refresh_env_has_value = bool(
+            args.refresh_token_env and os.environ.get(args.refresh_token_env, "").strip()
+        )
+
+        if args.auth_token is None and args.auth_token_file is None and not auth_env_has_value:
+            args.auth_token = _pick_string(["access_token", "auth_token", "token"])
+        if args.refresh_token is None and args.refresh_token_file is None and not refresh_env_has_value:
+            args.refresh_token = _pick_string(["refresh_token"])
+        if args.refresh_url is None:
+            args.refresh_url = _pick_string(["refresh_url", "refresh_endpoint", "token_refresh_url"])
 
     logging_kwargs: dict[str, Any] = {
         "level": logging.DEBUG if args.debug else logging.INFO,
@@ -218,7 +262,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         discovery_scope = args.refresh_discovery_path or ["<auth-like default>"]
         LOGGER.debug(
-            "refresh config: discover=%s scope=%s url_keys=%s token_keys=%s explicit_refresh_url=%s explicit_refresh_token=%s",
+            "refresh config: auth_json_file=%s discover=%s scope=%s url_keys=%s token_keys=%s explicit_refresh_url=%s explicit_refresh_token=%s",
+            bool(args.auth_json_file),
             args.discover_refresh_from_response,
             discovery_scope,
             args.refresh_discovery_url_key or ["refresh_url", "refresh_endpoint", "token_refresh_url"],

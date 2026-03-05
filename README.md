@@ -94,6 +94,7 @@ Auth tokens can be supplied in three ways:
 - `--auth-token <token>`
 - `--auth-token-file <path>`
 - `--auth-token-env <ENV_NAME>` (defaults to `APIFUSE_auth_token`)
+- `--auth-json-file <path>` (optional bundle input for `access_token`/`refresh_token`/`refresh_url`)
 
 The token value should be the raw token string. By default, `apifuse` sends it as `Authorization: Bearer <token>`.
 
@@ -117,6 +118,7 @@ Optional refresh discovery from API responses (disabled by default):
 - `--refresh-discovery-token-key <json_key>` (repeatable; default: `refresh_token`)
 
 Precedence rule: explicit CLI/env/file refresh values win; discovered values only fill missing `refresh_url`/`refresh_token`.
+For `--auth-json-file`, JSON-derived values are only used when token/refresh values are not already provided by direct CLI, token-file, or configured token-env values.
 
 ## Symlink Aliases
 
