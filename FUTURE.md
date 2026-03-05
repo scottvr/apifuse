@@ -1,4 +1,4 @@
-A use case I just thought of for the near future goes something like
+A use case I just thought of for a near-future writeup goes something like
 this:
 
 Big, complex database exists of lots of information that there could
