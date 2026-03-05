@@ -1,7 +1,7 @@
 # apifuse
 
 `apifuse` is a user-space FUSE proof of concept that projects an OpenAPI-described  
-REST API into a read-only filesystem dynamically populated with "files" and "directories"  
+REST API into a mounted read-only filesystem dynamically populated with "files" and "directories"  
 by responses to API calls when accessed by any means through the OS, as if the data  
 resided on a local filesystem.
 
