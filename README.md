@@ -1,10 +1,12 @@
 # apifuse
 
-`apifuse` is a user-space FUSE proof of concept that projects an OpenAPI-described REST API into a read-only filesystem dynamically 
-populated with "files" and "directories" by responses to API calls when accessed by any means through the OS, as if the data resided on
-a local filesystem.
+`apifuse` is a user-space FUSE proof of concept that projects an OpenAPI-described  
+REST API into a read-only filesystem dynamically populated with "files" and "directories"  
+by responses to API calls when accessed by any means through the OS, as if the data  
+resided on a local filesystem.
 
-It can also mount a local JSON document directly as a static filesystem tree, without reaching out to an API to dynamically the tree or data contained within.
+It can also mount a local JSON document directly as a static filesystem tree, without  
+reaching out to an API to dynamically the tree or data contained within.
 
 It is designed around a simple idea:
 
@@ -15,7 +17,9 @@ It is designed around a simple idea:
 
 ## Current Status
 
-This is an early PoC. That said, "it works for me." The current implementation focuses on:
+This is an early PoC. That said, "it works for me."  
+
+The current implementation focuses on:
 
 - OpenAPI-driven discovery of top-level collection and item `GET` routes
 - JSON-file offline mode (`--json-input`)
@@ -29,29 +33,33 @@ It is currently read-only. `POST`, `PUT`, `PATCH`, and `DELETE` are not implemen
 ## Requirements
 
 - Python
-- a working FUSE/macFUSE environment
 - `mfusepy`
+- a working [FUSE](https://www.kernel.org/doc/html/next/filesystems/fuse.html)/[macFUSE](https://macfuse.github.io/) environment
 
 ## Suggested Installation
 
 - Create a new venv if needed 
-e.g.,
+
+e.g. with:
 ```bash
 python -mvenv .venv
 ```
-or using `uv`, `pipx`, etc.  if you prefer.
+or by using `uv`, `pipx`, etc.  if you prefer.
 
 - Install dependencies as needed, using your package manager of choice:
+
+e.g., with:
 ```bash
 uv pip install -e .
 ```
 
-Since `apifuse` is not yet packaged for PyPi and you are running from 
+Since `apifuse` is not yet packaged for PyPi and you will be running from  
 the cloned repo, the `-e` (editable) method is recommended.
 
-An entry-point to the cli will be installed into your venv's bin path such
-that it will then be available just by invoking `apifuse` from within your
-shell with the venv activated.  e.g., with (`source .venv/bin/activate` or `.\venv\Scripts\activate`)
+An entry-point to the cli will be installed into your venv's bin path such  
+that it will then be available just by invoking `apifuse` from within your  
+shell with the venv activated.  
+e.g., with (`source .venv/bin/activate` or `.\venv\Scripts\activate`)
 
 ## Basic Usage
 
@@ -86,7 +94,6 @@ endpoint `/user/repos`a:
 ```bash
 apifuse \
   --json-input ./repos.json \
-  --symlink-names \
   /tmp/mnt_apifuse_json
 ```
 
@@ -98,9 +105,10 @@ ls /tmp/mnt_apifuse_json/0/
 cat /tmp/mnt_apifuse_json/0/name
 ```
 
-With the `--symlink-names` flag, the contents of that `name` file (field from the json)
-have already been read and applied as a symlink in the root directory of the mount so that
-you don't have to do such things as shown above in order to know which repo `0` refers to:
+With the `--symlink-names` flag, the contents of that `name` file (field from the json)  
+will have already been read and applied as a symlink in the root directory of the mount  
+so that you don't have to do such things as shown above in order to know which repo `0` is  
+referring to:
 
 
 ```bash
@@ -126,7 +134,7 @@ $ readlink -f /tmp/mnt_apifuse_json/0
 
 ## Symlinking values to Collection names
 
-Note: `--symlink-names` works exactly the same in `OpenAI` mode as what is shown above in
+Note: `--symlink-names` works exactly the same in `OpenAPI` mode as what is shown above in
 the JSON example wrt to the filesystem; it just retrieves the data with an HTTP call as per
 the API spec.
 
